@@ -1,0 +1,6 @@
+*.its
+*.csv
+*.CSV
+*.txt
+*.pyc
+venv/
