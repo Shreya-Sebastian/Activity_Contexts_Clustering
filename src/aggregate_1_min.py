@@ -20,8 +20,8 @@ import pandas as pd
 # ==========================================
 MACRO_EPOCH = '1Min'
 
-CHECKPOINT_RAW = 'raw_spatial_100ms_checkpoint.csv'
-SPATIAL_OUTPUT = 'spatial_features_1min.csv'
+CHECKPOINT_RAW = 'raw_spatial_100ms.csv'
+SPATIAL_OUTPUT = 'spatial_features_1min_test.csv'
 
 AGG_DICT = {
     'velocity': 'sum',
