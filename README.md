@@ -23,7 +23,7 @@ the repo name on the profile listing, where most reviewers stop scrolling.
 
 > MSc thesis pipeline, TU Delft (2026). Discovers latent activity contexts in an inclusive preschool from fused ultra-wideband (UWB) spatial tracking and LENA acoustic data, then compares children with hearing loss (HL) and typically hearing (TH) peers on three sensor-derivable behavioral markers of inclusion *within each context*.
 
-Companion thesis: *Discovering Latent Interaction Contexts from Multimodal Behavioral Data for Social Inclusion Analysis* — Shreya Sebastian, 2026. [LINK if hosted publicly, or "available on request"].
+Companion thesis: *Discovering Latent Interaction Contexts from Multimodal Behavioral Data for Social Inclusion Analysis* — Shreya Sebastian, 2026.
 
 ## TL;DR
 
