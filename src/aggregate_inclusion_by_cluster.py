@@ -8,10 +8,10 @@ import pandas as pd
 # ==========================================
 # 1. CONFIGURATION
 # ==========================================
-CLUSTERED_DATA_FILE = 'clustered_epochs_7.csv'
+CLUSTERED_DATA_FILE = 'clustered_epochs_4.csv'
 BASE_MAPPING         = 'data/mapping/MAPPING_StarFish_2223_BASE_NONAMES.csv'
 CONSOLIDATED_MAPPING = 'data/mapping/MAPPING_CONSOLIDATED.csv'
-OUTPUT_FILE          = 'child_inclusion_by_cluster_7.csv'
+OUTPUT_FILE          = 'child_inclusion_by_cluster_4.csv'
 
 # ==========================================
 # 2. MAIN
