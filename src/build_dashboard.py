@@ -15,9 +15,9 @@ import matplotlib.gridspec as gridspec
 # ==========================================
 # 1. CONFIGURATION
 # ==========================================
-CLUSTERED_DATA_FILE = 'clustered_epochs_7.csv'
-INCLUSION_DATA_FILE = 'child_inclusion_by_cluster_7.csv'
-OUTPUT_IMAGE = 'Inclusion_Dashboard_7.png'
+CLUSTERED_DATA_FILE = 'clustered_epochs_4.csv'
+INCLUSION_DATA_FILE = 'child_inclusion_by_cluster_4.csv'
+OUTPUT_IMAGE = 'Inclusion_Dashboard_4.png'
 
 CONTEXT_COLS = ['AWC_1min_Sum', 'Overlap_1min_Sum',
                 'Velocity_1min_TotalDist', 'Teacher_Dist_1min_Avg']
