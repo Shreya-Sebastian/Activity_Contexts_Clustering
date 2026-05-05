@@ -19,7 +19,7 @@ warnings.filterwarnings("ignore")
 CONSOLIDATED_MAPPING = 'data/mapping/MAPPING_CONSOLIDATED.csv'
 
 LENA_ITS_DIR = 'data/lena/'
-ACOUSTIC_OUTPUT = 'acoustic_features_1min.csv'
+ACOUSTIC_OUTPUT = 'acoustic_features_1min_test.csv'
 
 # LENA IDs that should never be assigned to a child
 PLACEHOLDER_LENA_IDS = {'22222'}
@@ -295,7 +295,7 @@ if __name__ == "__main__":
     if all_lena:
         acoustic_df = pd.concat(all_lena, ignore_index=True)
         acoustic_df.to_csv(ACOUSTIC_OUTPUT, index=False)
-        print(f"\n✅ Saved {len(acoustic_df)} minutes to {ACOUSTIC_OUTPUT}")
+        print(f"\n Saved {len(acoustic_df)} minutes to {ACOUSTIC_OUTPUT}")
         print(f"   Subjects covered: {acoustic_df['SUBJECTID'].nunique()}")
     else:
-        print("\n⚠ No acoustic data produced.")
+        print("\n No acoustic data produced.")
