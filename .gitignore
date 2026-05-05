@@ -5,4 +5,4 @@
 *.pyc
 *.png
 venv/
-.claude/
+.claude\
