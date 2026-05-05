@@ -1,30 +1,38 @@
 """
-Room-centric GMM clustering of classroom latent states.
+Room-level GMM clustering of classroom activity contexts.
 
 Merges spatial + acoustic features, averages per minute across children
-to capture whole-room context, then fits a Gaussian Mixture Model with
-a fixed number of components (K) chosen by manual coding of the
-recordings. See the thesis methodology chapter for the justification.
+present that minute, Yeo-Johnson transforms, and selects K by BIC over
+K = 2..14. The upper bound K = 14 is set on three grounds:
+  (i)   at K = 15 a wider sweep showed an EM-init artifact (single
+        random restart finds a sharp local optimum that does not
+        reproduce at K = 14 or K = 16);
+  (ii)  inclusive-preschool routines are not documented to contain
+        more than ~10 distinct activity contexts (Irvin et al., 2021);
+  (iii) at K >= 15 the per-component sample size becomes too small
+        for stable full-covariance estimation.
+
+Cluster IDs are relabeled by ascending AWC centroid so C0..C(K-1) are
+deterministic across runs.
+
+Output: clustered_epochs_{K}.csv (per-(child, minute) rows).
 """
 
-import pandas as pd
-import numpy as np
-from sklearn.preprocessing import PowerTransformer
-from sklearn.mixture import GaussianMixture
 import warnings
+
+import numpy as np
+import pandas as pd
+from sklearn.mixture import GaussianMixture
+from sklearn.preprocessing import PowerTransformer
 
 warnings.filterwarnings("ignore")
 
-# ==========================================
-# 1. CONFIGURATION
-# ==========================================
-SPATIAL_FILE = 'spatial_features_1min.csv'
+SPATIAL_FILE  = 'spatial_features_1min.csv'
 ACOUSTIC_FILE = 'acoustic_features_1min.csv'
-OUTPUT_FILE = 'clustered_epochs_7.csv'
 
-# Number of latent classroom states, fixed by manual coding.
-# See thesis methodology chapter for rationale.
-N_COMPONENTS = 7
+K_RANGE      = range(2, 15)
+N_INIT       = 10
+RANDOM_STATE = 42
 
 CLUSTER_FEATURES = [
     'AWC_1min_Sum',
@@ -33,79 +41,56 @@ CLUSTER_FEATURES = [
     'Teacher_Dist_1min_Avg',
 ]
 
-# ==========================================
-# 2. MAIN
-# ==========================================
+
+def to_eastern(df):
+    if 'TIME_UTC' in df.columns and 'TIME_LOCAL' not in df.columns:
+        df = df.rename(columns={'TIME_UTC': 'TIME_LOCAL'})
+    df['TIME_LOCAL'] = pd.to_datetime(df['TIME_LOCAL'], utc=True).dt.tz_convert('America/New_York')
+    return df
+
+
 if __name__ == "__main__":
-    print("\n" + "=" * 60)
-    print("   ROOM-CENTRIC LATENT STATE CLUSTERING (GMM)")
-    print("=" * 60)
+    print(f"\n{'=' * 60}\n   ROOM-CENTRIC GMM CLUSTERING\n{'=' * 60}")
 
-    print("1. Loading and merging feature data...")
-    try:
-        df_spatial = pd.read_csv(SPATIAL_FILE)
-        df_acoustic = pd.read_csv(ACOUSTIC_FILE)
+    # Load + merge on (subject, minute)
+    df = pd.merge(
+        to_eastern(pd.read_csv(SPATIAL_FILE)),
+        to_eastern(pd.read_csv(ACOUSTIC_FILE)),
+        on=['SUBJECTID', 'TIME_LOCAL'], how='inner',
+    )
 
-        # Normalize spatial timestamps to Eastern (legacy files may use TIME_UTC)
-        if 'TIME_UTC' in df_spatial.columns and 'TIME_LOCAL' not in df_spatial.columns:
-            df_spatial = df_spatial.rename(columns={'TIME_UTC': 'TIME_LOCAL'})
-        df_spatial['TIME_LOCAL'] = pd.to_datetime(
-            df_spatial['TIME_LOCAL'], utc=True
-        ).dt.tz_convert('America/New_York')
+    # >= 3 children per minute, then room-level mean
+    counts = df.groupby('TIME_LOCAL').size()
+    df = df[df['TIME_LOCAL'].isin(counts[counts >= 3].index)]
+    room = (df.groupby('TIME_LOCAL')[CLUSTER_FEATURES].mean()
+              .reset_index().dropna(subset=CLUSTER_FEATURES))
 
-        df_acoustic['TIME_LOCAL'] = pd.to_datetime(
-            df_acoustic['TIME_LOCAL'], utc=True
-        ).dt.tz_convert('America/New_York')
+    # Yeo-Johnson + BIC sweep
+    X = PowerTransformer(method='yeo-johnson').fit_transform(room[CLUSTER_FEATURES])
+    print(f"Room-level minutes: {len(X)}\n\n{'K':>3}  {'BIC':>11}  conv")
+    fits = []
+    for k in K_RANGE:
+        gmm = GaussianMixture(n_components=k, covariance_type='full',
+                              random_state=RANDOM_STATE, n_init=N_INIT).fit(X)
+        bic = gmm.bic(X)
+        fits.append((k, bic, gmm))
+        print(f"{k:>3}  {bic:>11.1f}  {gmm.converged_}")
+    best_k, best_bic, gmm = min(fits, key=lambda r: r[1])
+    print(f"\nBest K by BIC: {best_k}  (BIC = {best_bic:.1f})")
 
-    except Exception as e:
-        print(f"\nCRITICAL ERROR: {e}")
-        exit()
+    # Relabel by ascending AWC centroid -> deterministic C0..C(K-1)
+    awc_idx = CLUSTER_FEATURES.index('AWC_1min_Sum')
+    relabel = {int(old): new for new, old in enumerate(np.argsort(gmm.means_[:, awc_idx]))}
+    room['Cluster_ID'] = pd.Series(gmm.predict(X)).map(relabel).values
 
-    df_clean = pd.merge(df_spatial, df_acoustic, on=['SUBJECTID', 'TIME_LOCAL'], how='inner')
+    # Profiles
+    profiles = room.groupby('Cluster_ID')[CLUSTER_FEATURES].mean().round(2)
+    profiles['% of Day'] = (room['Cluster_ID'].value_counts(normalize=True)
+                                              .sort_index() * 100).round(1)
+    print(f"\nLATENT CLASSROOM PROFILES (sorted by AWC ascending):\n{profiles.to_string()}")
 
-    if df_clean.empty:
-        print("ERROR: No overlapping data between spatial and acoustic files.")
-        exit()
-
-    print(f"   -> Merged {len(df_clean)} rows across {df_clean['SUBJECTID'].nunique()} subjects.")
-
-    # ==========================================
-    # 3. ROOM-CENTRIC AGGREGATION
-    # ==========================================
-    print("2. Averaging features per minute across the room...")
-
-    # Require at least 3 children active in the minute
-    children_per_minute = df_clean.groupby('TIME_LOCAL').size()
-    valid_minutes = children_per_minute[children_per_minute >= 3].index
-    df_clean = df_clean[df_clean['TIME_LOCAL'].isin(valid_minutes)]
-
-    room_df = df_clean.groupby('TIME_LOCAL')[CLUSTER_FEATURES].mean().reset_index()
-    room_df = room_df.dropna(subset=CLUSTER_FEATURES).copy()
-
-    print("3. Power-transforming skewed features...")
-    scaler = PowerTransformer(method='yeo-johnson')
-    scaled_room_features = scaler.fit_transform(room_df[CLUSTER_FEATURES])
-
-    # ==========================================
-    # 4. FIT GMM WITH FIXED K
-    # ==========================================
-    print(f"4. Fitting GMM with K = {N_COMPONENTS} latent states "
-          f"(K fixed by manual coding)...")
-    gmm = GaussianMixture(n_components=N_COMPONENTS, covariance_type="full",
-                          random_state=42, n_init=10)
-    room_df['Cluster_ID'] = gmm.fit_predict(scaled_room_features)
-
-    # Propagate cluster labels back to per-child rows
-    df_final = pd.merge(df_clean, room_df[['TIME_LOCAL', 'Cluster_ID']],
-                        on='TIME_LOCAL', how='inner')
-
-    print("\n" + "=" * 60)
-    print("        LATENT CLASSROOM PROFILES")
-    print("=" * 60)
-    profiles = room_df.groupby('Cluster_ID')[CLUSTER_FEATURES].mean().round(2)
-    profiles['% of Day'] = (room_df['Cluster_ID'].value_counts(normalize=True) * 100).round(1)
-    print(profiles.sort_values(by='% of Day', ascending=False).to_string())
-    print("=" * 60 + "\n")
-
-    df_final.to_csv(OUTPUT_FILE, index=False)
-    print(f"Saved results to {OUTPUT_FILE}")
+    # Propagate to per-child rows and save
+    out = f'clustered_epochs_{best_k}.csv'
+    (pd.merge(df, room[['TIME_LOCAL', 'Cluster_ID']], on='TIME_LOCAL', how='inner')
+       .to_csv(out, index=False))
+    print(f"\nSaved to {out}")
