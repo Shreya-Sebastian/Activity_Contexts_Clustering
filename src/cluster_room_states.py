@@ -1,23 +1,3 @@
-"""
-Room-level GMM clustering of classroom activity contexts.
-
-Merges spatial + acoustic features, averages per minute across children
-present that minute, Yeo-Johnson transforms, and selects K by BIC over
-K = 2..14. The upper bound K = 14 is set on three grounds:
-  (i)   at K = 15 a wider sweep showed an EM-init artifact (single
-        random restart finds a sharp local optimum that does not
-        reproduce at K = 14 or K = 16);
-  (ii)  inclusive-preschool routines are not documented to contain
-        more than ~10 distinct activity contexts (Irvin et al., 2021);
-  (iii) at K >= 15 the per-component sample size becomes too small
-        for stable full-covariance estimation.
-
-Cluster IDs are relabeled by ascending AWC centroid so C0..C(K-1) are
-deterministic across runs.
-
-Output: clustered_epochs_{K}.csv (per-(child, minute) rows).
-"""
-
 import warnings
 
 import numpy as np
