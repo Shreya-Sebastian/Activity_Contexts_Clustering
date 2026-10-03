@@ -7,9 +7,12 @@ import pandas as pd
 import seaborn as sns
 from sklearn.preprocessing import MinMaxScaler
 
-CLUSTERED = 'clustered_epochs_7.csv'
-INCLUSION = 'child_inclusion_by_cluster_7.csv'
-OUTPUT    = 'Inclusion_Dashboard_7.png'
+with open('selected_k.txt') as f:
+    K = f.read().strip()
+
+CLUSTERED = f'clustered_epochs_{K}.csv'
+INCLUSION = f'child_inclusion_by_cluster_{K}.csv'
+OUTPUT    = f'Inclusion_Dashboard_{K}.png'
 
 CONTEXT_COLS = ['AWC_1min_Sum', 'Overlap_1min_Sum',
                 'Velocity_1min_TotalDist', 'Teacher_Dist_1min_Avg']
@@ -37,7 +40,7 @@ if __name__ == "__main__":
                 ).set_title('Environmental Context Profiles', fontweight='bold')
     sns.barplot(data=df_inc, x='Cluster_ID', y='Avg_Time_In_Group_Pct', hue='Diagnosis',
                 ax=fig.add_subplot(gs[0, 1]), palette=PALETTE, capsize=0.05
-                ).set_title('Peer Co-presence (% in F-formation)', fontweight='bold')
+                ).set_title('Peer Co-presence (% in spatial group)', fontweight='bold')
     ax3 = fig.add_subplot(gs[1, 0])
     sns.barplot(data=df_inc, x='Cluster_ID', y='Avg_Utt_Count', hue='Diagnosis',
                 ax=ax3, palette=PALETTE, capsize=0.05

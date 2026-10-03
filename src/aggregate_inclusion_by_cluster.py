@@ -2,10 +2,13 @@
 
 import pandas as pd
 
-CLUSTERED = 'clustered_epochs_7.csv'
+with open('selected_k.txt') as f:
+    K = f.read().strip()
+
+CLUSTERED = f'clustered_epochs_{K}.csv'
 BASE      = 'data/mapping/MAPPING_StarFish_2223_BASE_NONAMES.csv'
 CONSOL    = 'data/mapping/MAPPING_CONSOLIDATED.csv'
-OUTPUT    = 'child_inclusion_by_cluster_7.csv'
+OUTPUT    = f'child_inclusion_by_cluster_{K}.csv'
 
 
 if __name__ == "__main__":

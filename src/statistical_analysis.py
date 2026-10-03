@@ -8,13 +8,19 @@ import numpy as np
 import pandas as pd
 import statsmodels.formula.api as smf
 from scipy import stats
+from statsmodels.stats.multitest import multipletests
 
 warnings.filterwarnings("ignore")
 
-CLUSTERED = 'clustered_epochs_7.csv'
-CONSOL    = 'data/mapping/MAPPING_CONSOLIDATED.csv'
-BASE      = 'data/mapping/MAPPING_StarFish_2223_BASE_NONAMES.csv'
-OUTPUT    = 'statistical_analysis_results_7.txt'
+with open('selected_k.txt') as f:
+    K = f.read().strip()
+
+CLUSTERED    = f'clustered_epochs_{K}.csv'
+CONSOL       = 'data/mapping/MAPPING_CONSOLIDATED.csv'
+BASE         = 'data/mapping/MAPPING_StarFish_2223_BASE_NONAMES.csv'
+OUTPUT       = f'statistical_analysis_results_{K}.txt'
+
+FDR_ALPHA = 0.05
 
 PHYSICAL_DV   = 'Time_In_Group_1min_Pct'
 EXPRESSIVE_DV = 'Child_Utt_Count_1min'
@@ -59,13 +65,31 @@ def _split(per, c, col='Cluster_ID'):
             per[(per[col] == c) & (per['Diagnosis'] == 'TH')])
 
 
+def _emit_with_fdr(out, rows):
+    """rows: list of (formatted_row_prefix, p). Appends each row with its
+    raw p plus a q-value (Benjamini-Hochberg FDR, corrected within this
+    family of tests only -- e.g. across the per-cluster contrasts for one
+    marker, not pooled across markers)."""
+    ps = [p for _, p in rows]
+    valid = [i for i, p in enumerate(ps) if not np.isnan(p)]
+    qs = [np.nan] * len(ps)
+    if valid:
+        _, q_valid, _, _ = multipletests([ps[i] for i in valid], alpha=FDR_ALPHA, method='fdr_bh')
+        for i, q in zip(valid, q_valid):
+            qs[i] = q
+    for (prefix, p), q in zip(rows, qs):
+        out.append(f"{prefix} {p:>8.4f} {q:>8.4f}")
+
+
 def exposure(df, out):
-    out += ["", "EXPOSURE — % of each child's day per cluster (Mann-Whitney)",
+    # A balance check, not a hypothesis test -- reported uncorrected (thesis Sec 5.7.4),
+    # unlike the three inclusion markers and the homophily index below.
+    out += ["", "EXPOSURE — % of each child's day per cluster (Mann-Whitney, uncorrected)",
             "-" * 70, f"{'Cluster':<10} {'HL %':>8} {'TH %':>8} {'diff':>8} {'d':>8} {'p':>8}"]
     per = df.groupby(['SUBJECTID', 'Diagnosis', 'Cluster_ID']).size().reset_index(name='n')
     per = per.merge(df.groupby('SUBJECTID').size().rename('tot'), on='SUBJECTID')
     per['pct'] = per['n'] / per['tot'] * 100
-    for c in sorted(df['Cluster_ID'].unique()):
+    for c in sorted(df['Cluster_ID'].unique(), key=int):
         hl, th = _split(per, c)
         hp, tp = hl['pct'], th['pct']
         p = stats.mannwhitneyu(hp, tp, alternative='two-sided').pvalue if len(hp) >= 2 and len(tp) >= 2 else np.nan
@@ -76,7 +100,7 @@ def exposure(df, out):
 def inclusion(df, dv, label, out):
     out += ["", f"{label.upper()} — {dv}",
             f"LMM: {dv} ~ C(Cluster_ID) * C(Diagnosis) + (1 | SUBJECTID)",
-            "-" * 70, f"{'Cluster':<10} {'HL':>8} {'TH':>8} {'diff':>8} {'d':>8} {'p':>8}"]
+            "-" * 70, f"{'Cluster':<10} {'HL':>8} {'TH':>8} {'diff':>8} {'d':>8} {'p':>8} {'q':>8}"]
     d = df.dropna(subset=[dv]).copy()
     d['Diagnosis'] = pd.Categorical(d['Diagnosis'], categories=['TH', 'HL'])
     try:
@@ -87,8 +111,9 @@ def inclusion(df, dv, label, out):
 
     cm = d.groupby(['SUBJECTID', 'Diagnosis', 'Cluster_ID'])[dv].mean().reset_index()
     params = list(model.fe_params.index)
-    clusters = sorted(d['Cluster_ID'].unique())
+    clusters = sorted(d['Cluster_ID'].unique(), key=int)
     ref = clusters[0]
+    rows = []
     for c in clusters:
         contrast = np.zeros(len(params))
         contrast[params.index('C(Diagnosis)[T.HL]')] = 1
@@ -98,27 +123,32 @@ def inclusion(df, dv, label, out):
                 contrast[params.index(inter)] = 1
         t = model.t_test(contrast.reshape(1, -1))
         hl, th = _split(cm, c)
-        out.append(f"{c:<10} {hl[dv].mean():>8.2f} {th[dv].mean():>8.2f} "
-                   f"{float(t.effect[0]):>+8.2f} {cohens_d(hl[dv], th[dv]):>+8.2f} {float(t.pvalue):>8.4f}")
+        prefix = (f"{c:<10} {hl[dv].mean():>8.2f} {th[dv].mean():>8.2f} "
+                  f"{float(t.effect[0]):>+8.2f} {cohens_d(hl[dv], th[dv]):>+8.2f}")
+        rows.append((prefix, float(t.pvalue)))
+    _emit_with_fdr(out, rows)
 
 
 def homophily_index(df, out):
     """same / (same + mixed) per (child, cluster), conditional on being grouped.
     1.0 = always with same-diagnosis peers; 0.0 = always mixed."""
     out += ["", "HOMOPHILY INDEX — same / (same + mixed) group-minute totals",
-            "(per child, per cluster; conditional on being in an F-formation)",
-            "-" * 70, f"{'Cluster':<10} {'HL idx':>10} {'TH idx':>10} {'diff':>8} {'d':>8} {'p':>8}"]
+            "(per child, per cluster; conditional on being in a spatial group)",
+            "-" * 70, f"{'Cluster':<10} {'HL idx':>10} {'TH idx':>10} {'diff':>8} {'d':>8} {'p':>8} {'q':>8}"]
     per = (df.assign(same=df[SAMEDX_DV], mixed=df[MIXED_DV])
              .groupby(['SUBJECTID', 'Diagnosis', 'Cluster_ID'])[['same', 'mixed']].sum().reset_index())
     per['grouped'] = per['same'] + per['mixed']
     per = per[per['grouped'] > 0].copy()
     per['idx'] = per['same'] / per['grouped']
-    for c in sorted(df['Cluster_ID'].unique()):
+    rows = []
+    for c in sorted(df['Cluster_ID'].unique(), key=int):
         hl, th = _split(per, c)
         hi, ti = hl['idx'], th['idx']
         p = stats.mannwhitneyu(hi, ti, alternative='two-sided').pvalue if len(hi) >= 2 and len(ti) >= 2 else np.nan
-        out.append(f"{c:<10} {hi.mean():>10.2f} {ti.mean():>10.2f} "
-                   f"{hi.mean() - ti.mean():>+8.2f} {cohens_d(hi, ti):>+8.2f} {p:>8.4f}")
+        prefix = (f"{c:<10} {hi.mean():>10.2f} {ti.mean():>10.2f} "
+                  f"{hi.mean() - ti.mean():>+8.2f} {cohens_d(hi, ti):>+8.2f}")
+        rows.append((prefix, p))
+    _emit_with_fdr(out, rows)
 
 
 def main():
@@ -128,7 +158,11 @@ def main():
     out = ["SOCIAL INCLUSION BY CLUSTER", "=" * 70,
            f"Sample: {n_hl} HL + {n_th} TH children, {len(df):,} minutes, "
            f"{df['Cluster_ID'].nunique()} clusters",
-           "All p-values compare HL vs TH within each cluster."]
+           "All p-values compare HL vs TH within each cluster.",
+           f"q = Benjamini-Hochberg FDR-adjusted p, corrected within each "
+           f"marker's family of per-cluster contrasts (alpha={FDR_ALPHA}). "
+           f"Exposure is a balance check, not a hypothesis test, and is "
+           f"reported uncorrected (no q column)."]
     exposure(df, out)
     inclusion(df, PHYSICAL_DV,   "Peer Co-presence",                            out)
     inclusion(df, EXPRESSIVE_DV, "Vocal Participation Rate",                    out)
@@ -137,7 +171,7 @@ def main():
     homophily_index(df, out)
 
     text = '\n'.join(out)
-    with open(OUTPUT, 'w') as f:
+    with open(OUTPUT, 'w', encoding='utf-8') as f:
         f.write(text)
     print(text)
     print(f"\nSaved to {OUTPUT}")

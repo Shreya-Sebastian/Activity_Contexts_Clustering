@@ -11,20 +11,25 @@ import seaborn as sns
 
 warnings.filterwarnings("ignore")
 
-CLUSTERED       = 'clustered_epochs_7.csv'
+with open('selected_k.txt') as f:
+    K = f.read().strip()
+
+CLUSTERED       = f'clustered_epochs_{K}.csv'
 UBISENSE_DIR    = 'data/ubisense/'
 TEACHER_PATTERN = '_T|_Lab'
 
 # Labels under the AWC-ascending cluster ordering applied in
-# cluster_room_states.py. Identified by centroid profile
+# cluster_room_states.py. Canonical K=6 labels verbatim from the final
+# defended thesis (Abstract; Sec 6.1; Sec 7.1). Only valid if K resolves
+# to 6 -- for any other K these are placeholders and should be re-derived
+# from the fresh centroid profiles.
 CLUSTER_LABELS = {
-    0: 'Dispersed transition',           # lowest AWC, highest velocity + teacher dist
-    1: 'Active peer interaction',        # mod-high teacher distance (~4.5 m)
-    2: 'Quiet sedentary',                # lowest auditory overlap
-    3: 'Free play',                      # largest cluster, high overlap, low teacher dist
-    4: 'Structured seated conversation', # lowest velocity (~9 m/min)
-    5: 'Teacher-proximal group activity',# lowest teacher distance, second-largest cluster
-    6: 'Teacher-led direct instruction', # highest AWC
+    0: 'Dispersed transition',
+    1: 'Peer-driven activity',
+    2: 'Independent / parallel work',
+    3: 'Adult-scaffolded peer activity',
+    4: 'Seated guided work',
+    5: 'Whole-class instruction / read-aloud',
 }
 
 

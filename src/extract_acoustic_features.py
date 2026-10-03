@@ -19,7 +19,7 @@ warnings.filterwarnings("ignore")
 CONSOLIDATED_MAPPING = 'data/mapping/MAPPING_CONSOLIDATED.csv'
 
 LENA_ITS_DIR = 'data/lena/'
-ACOUSTIC_OUTPUT = 'acoustic_features_1min_test.csv'
+ACOUSTIC_OUTPUT = 'acoustic_features_1min.csv'
 
 # LENA IDs that should never be assigned to a child
 PLACEHOLDER_LENA_IDS = {'22222'}
