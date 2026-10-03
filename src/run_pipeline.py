@@ -15,24 +15,39 @@ from pathlib import Path
 
 SCRIPT_DIR   = Path(__file__).resolve().parent
 PROJECT_ROOT = SCRIPT_DIR.parent
+SELECTED_K_FILE = PROJECT_ROOT / 'selected_k.txt'
+
+
+def _k_output(template):
+    """Resolve a '{K}'-templated output name against selected_k.txt. Returns
+    None (never cached) if the cluster stage hasn't run yet."""
+    def resolve():
+        if not SELECTED_K_FILE.exists():
+            return None
+        k = SELECTED_K_FILE.read_text().strip()
+        return template.format(K=k)
+    return resolve
+
 
 PIPELINE = [
     ('acoustic',       'extract_acoustic_features.py',      'acoustic_features_1min.csv'),
     ('spatial_100ms',  'extract_100ms_features.py',         'raw_spatial_100ms.csv'),
     ('spatial_1min',   'aggregate_1_min.py',                'spatial_features_1min.csv'),
-    ('cluster',        'cluster_room_states.py',            'clustered_epochs_7.csv'),
-    ('aggregate',      'aggregate_inclusion_by_cluster.py', 'child_inclusion_by_cluster_7.csv'),
-    ('dashboard',      'build_dashboard.py',                'Inclusion_Dashboard_7.png'),
-    ('stats',          'statistical_analysis.py',           'statistical_analysis_results_7.txt'),
+    ('cluster',        'cluster_room_states.py',            _k_output('clustered_epochs_{K}.csv')),
+    ('aggregate',      'aggregate_inclusion_by_cluster.py', _k_output('child_inclusion_by_cluster_{K}.csv')),
+    ('dashboard',      'build_dashboard.py',                _k_output('Inclusion_Dashboard_{K}.png')),
+    ('stats',          'statistical_analysis.py',           _k_output('statistical_analysis_results_{K}.txt')),
 ]
 NAMES = [s[0] for s in PIPELINE]
 
 
 def run_step(script, output, force):
-    sp, op = SCRIPT_DIR / script, PROJECT_ROOT / output
+    sp = SCRIPT_DIR / script
+    output = output() if callable(output) else output
+    op = PROJECT_ROOT / output if output else None
     if not sp.exists():
         print(f"   Script not found: {sp}"); return False
-    if op.exists() and not force:
+    if op is not None and op.exists() and not force:
         print(f"Cached: {op}"); return True
     print(f"{script}")
     t0 = time.time()

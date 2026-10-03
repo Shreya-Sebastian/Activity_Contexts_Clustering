@@ -16,9 +16,12 @@ from sklearn.preprocessing import PowerTransformer
 
 warnings.filterwarnings("ignore")
 
+with open('selected_k.txt') as f:
+    K = f.read().strip()
+
 SPATIAL   = 'spatial_features_1min.csv'
 ACOUSTIC  = 'acoustic_features_1min.csv'
-CLUSTERED = 'clustered_epochs_7.csv'
+CLUSTERED = f'clustered_epochs_{K}.csv'
 
 OUT_MARG  = 'feature_distributions.png'
 OUT_PAIR  = 'feature_pairplot.png'
