@@ -1,115 +1,130 @@
 # Activity-Context Clustering for Social-Inclusion Analysis
 
-> MSc thesis pipeline, TU Delft (2026). Discovers latent activity contexts in an inclusive preschool from fused ultra-wideband (UWB) spatial tracking and LENA acoustic data, then compares children with hearing loss (HL) and typically hearing (TH) peers on three sensor-derivable behavioral markers of inclusion *within each context*.
+MSc thesis pipeline, TU Delft (2026). It discovers latent activity contexts in an inclusive preschool from fused ultra-wideband (UWB) spatial tracking and LENA audio, then compares children with hearing loss (HL) and their typically hearing (TH) peers on three sensor-derived behavioural markers of inclusion within each context.
 
-Companion thesis: *Discovering Latent Interaction Contexts from Multimodal Behavioral Data for Social Inclusion Analysis* — Shreya Sebastian, 2026.
+Companion thesis: *Automated Discovery of Latent Activity Contexts from Multimodal Sensing for Peer-Interaction Analysis in Preschoolers with Hearing Loss*, Shreya Sebastian, 2026.
 
-## TL;DR
+## Summary
 
-A Gaussian Mixture Model on four room-level features (adult word count, auditory overlap, cumulative displacement, teacher distance) recovers seven interpretable activity contexts in a single inclusive preschool (13 children, 6 HL + 7 TH). A linear mixed model with a per-child random intercept then tests HL vs TH on **peer co-presence**, **vocal participation rate**, and **peer affiliation patterns** within each context. The HL/TH signal is **not uniform**: it lives in specific cluster-by-diagnosis interactions and disappears when averaged across contexts.
+A Gaussian Mixture Model on four room-level features (adult word count, auditory overlap, cumulative displacement and teacher distance), with the number of components chosen by a stability-aware BIC rule over K = 2 to 20, recovers **six** activity contexts in a single inclusive preschool classroom (13 children: 6 HL, 7 TH). Within each context, a linear mixed model with a per-child random intercept compares HL and TH children on **peer co-presence**, **vocal participation rate** and **peer affiliation patterns**. The HL/TH differences are context-specific: each marker differs significantly in some contexts and not in others, and much of the signal disappears when the day is analysed as a whole.
 
 ## Why this problem
 
-In inclusive classrooms, the physical presence of HL children does not guarantee social inclusion with TH peers. Self-report is biased and manual observation is too labor-intensive for fine-grained, full-day coverage. Wearable sensing (UWB position, child-worn LENA audio) can record continuous co-presence and vocal activity, but the meaning of those signals depends on what the *room* is doing — a quiet sedentary minute and a free-play minute are not comparable. The pipeline turns continuous sensor streams into (child, minute) rows labeled with an activity context, then tests inclusion *within* context.
+In inclusive classrooms, the physical presence of HL children does not guarantee social inclusion with TH peers. Self-report is biased, and manual observation is too labour-intensive to cover a full school day at fine temporal resolution. Wearable sensing records co-presence and vocal activity continuously, but the meaning of those signals depends on what the room is doing: a minute of quiet table work and a minute of free play are not comparable. The pipeline therefore labels every (child, minute) with an activity context and tests inclusion within each context.
 
 ## Research questions
 
 > **RQ1.** Can a set of interpretable latent activity contexts in an inclusive classroom be recovered from fused UWB spatial data and LENA acoustic data using unsupervised clustering?
 >
-> **RQ2.** Within each recovered activity context, do HL and TH children differ on three sensor-derivable behavioral markers of inclusion: (a) peer co-presence, (b) vocal participation rate, (c) peer affiliation patterns?
+> **RQ2.** Within each recovered activity context, do HL children and their TH peers differ on three sensor-derivable behavioural markers of inclusion: (a) peer co-presence, (b) vocal participation rate and (c) peer affiliation patterns?
 
-The hypotheses follow modality-mismatch literature: HL children are expected to compensate for reduced access to rapid verbal exchange by remaining physically co-present while under-producing vocally, with the gap concentrating in contexts that combine high peer communicative demand with reduced adult scaffolding.
+## Data
+
+- **UWB positioning.** Each child and teacher wears a vest with two Ubisense tags, giving position and shoulder orientation at 10 Hz.
+- **LENA audio.** Each child wears a LENA recorder; its offline speaker-type segments give child utterances, adult word counts and overlap.
+- **Coverage.** 13 recording days in one classroom, about 164 minutes per child per day. The fused stream gives 22,730 (child, minute) rows; 22,251 minutes with at least three children jointly observed are labelled with a context, and the 21,847 that fall on attendance-confirmed days are used for the statistics.
+
+The data are **not redistributable**: they are child-worn audio and indoor tracking of minors, collected under a research-ethics protocol that does not permit public release. This repository contains the analysis pipeline only.
 
 ## Pipeline
 
 ```
-UWB (10 Hz x, y, θ)        LENA (timestamped speaker-type segments)
-        │                              │
-        ▼                              ▼
- per-frame displacement,         proportional binning of
- F-formation membership          AWC / overlap / utterance counts
- via Dominant Sets [Hung &       to 1-min epochs
- Kröse 2011] on socio-spatial
- affinity (proximity × mutual                  │
- orientation, σ=0.5 m)                         ▼
-        │                          per-child, per-minute
-        ▼                          acoustic features
- per-child, per-minute                         │
- spatial features                              │
-        │                                      │
-        └──────────────► inner-join on (child, minute) ──────────────┐
-                                                                     │
-                                                                     ▼
-                                          room-level averaging across children
-                                                  (4 features:
-                                                   AWC, auditory overlap,
-                                                   displacement, teacher dist.)
-                                                                     │
-                                                                     ▼
-                                              Yeo–Johnson power transform
-                                                                     │
-                                                                     ▼
-                                              GMM, K=7, full covariance
-                                                                     │
-                                                                     ▼
-                                       cluster label per (child, minute)
-                                                                     │
-                                                                     ▼
-                                  LMM(outcome ~ cluster × HL/TH + (1|child))
-                                  + Mann–Whitney U on per-child homophily
-                                                                     │
-                                                                     ▼
-                                          per-context HL/TH contrasts
+UWB (10 Hz x, y, θ)                      LENA (time-stamped speaker-type segments)
+        │                                              │
+        ▼                                              ▼
+per-frame displacement, teacher distance,     proportional binning of adult words,
+spatial groups via Dominant Sets on a         overlap and utterances into
+proximity × mutual-orientation affinity       one-minute epochs
+(σ = 0.5 m)                                            │
+        │                                              │
+        ▼                                              │
+per-child, per-minute spatial features                 │
+        └────────────► join on (child, minute) ◄───────┘
+                                │
+                                ▼
+          room-level mean over children present (≥ 3 per minute):
+          adult word count, auditory overlap, displacement, teacher distance
+                                │
+                                ▼
+                 Yeo-Johnson transform per feature
+                                │
+                                ▼
+        full-covariance GMM, K chosen by stability-aware BIC (K = 2..20)
+                                │
+                                ▼
+                  context label per (child, minute)
+                                │
+                                ▼
+   LMM: outcome ~ cluster × diagnosis + (1 | child), per-cluster Wald contrasts
+   + Mann-Whitney U on per-child homophily, Benjamini-Hochberg FDR per marker
 ```
 
-`K = 7` is fixed *a priori* from manual coding of this classroom's daily routine; cluster *assignment* and *profile* are recovered from sensor data. This makes the pipeline **semi-unsupervised** rather than fully unsupervised.
+**Spatial groups.** Groups of children who are simultaneously close and mutually body-oriented are detected with the Dominant Sets framework. They are motivated by the F-formation idea but are not claimed to be F-formations, since it is not established that children of this age form them. Orientation is shoulder orientation from the two tags, not gaze.
+
+**Choosing K.** For each K from 2 to 20, twenty full-covariance GMMs are fit (each with ten restarts and its own seed). K is admissible if the mean pairwise Adjusted Rand Index between the twenty label sets is at least 0.80; the admissible K with the lowest mean BIC is selected. The admissible set is {2, 3, 5, 6} and K = 6 is chosen. K = 7 has a slightly lower mean BIC but does not reproduce across seeds (mean ARI 0.69). Cluster IDs are re-indexed by ascending adult word count.
+
+![Stability-aware BIC sweep](figures/k_selection_bic.png)
 
 ## Recovered activity contexts
 
-| Cluster | Label                              | Approx. share | Sensor signature                                  |
-|---------|------------------------------------|---------------|---------------------------------------------------|
-| 0       | Teacher-proximal group activity    | ~25%          | High AWC, lowest teacher distance, low movement   |
-| 1       | Teacher-led direct instruction     | ~14%          | Highest AWC, low overlap                          |
-| 2       | Quiet sedentary activity           | ~6%           | Lowest auditory overlap, low utterances           |
-| 3       | Structured seated conversation     | ~10%          | Near-zero displacement, moderate overlap          |
-| 4       | Active peer interaction            | ~16%          | High displacement, moderate teacher distance      |
-| 5       | Free play                          | ~22%          | High overlap, moderate-to-high displacement       |
-| 6       | Dispersed high-movement transition | ~6%           | Min AWC, max overlap/displacement/teacher dist.   |
+![Sensor profile of each context](figures/env_context_profiles.png)
 
-All seven components are interpretable as recognizable phases of an inclusive preschool day. The exposure check (Table 6.1 in the thesis) finds no significant HL/TH imbalance across contexts.
+| Cluster | Descriptive label | Share of time | Sensor signature |
+|---|---|---|---|
+| 0 | Dispersed transition | ~6.9% | Lowest adult speech, highest displacement and teacher distance (~9.4 m) |
+| 1 | Peer-driven activity | ~6.0% | Low adult speech, high overlap, teacher comparatively far (~4.2 m) |
+| 2 | Independent / parallel work | ~8.6% | Lowest auditory overlap, low adult speech, fewest utterances |
+| 3 | Adult-scaffolded peer activity | ~33.9% | Moderate adult speech, high overlap, teacher close (~2.1 m) |
+| 4 | Seated guided work | ~9.8% | High adult speech, lowest displacement, teacher close (~1.6 m) |
+| 5 | Whole-class instruction / read-aloud | ~34.8% | Highest adult speech (~66 words/min), teacher closest (~1.5 m) |
 
-## Headline findings
+The labels are post-hoc descriptions of the sensor profiles. They are qualitatively consistent with an independent manual coding of the daily routine (eight activity types), which was consulted only after K was fixed and never used to fit the model. The statistics are computed on cluster IDs, so the labels do not affect any test.
 
-| Marker                  | Pattern across the 7 contexts                                                                                       |
-|-------------------------|---------------------------------------------------------------------------------------------------------------------|
-| Peer co-presence        | No HL/TH difference in 6 of 7 contexts. HL > TH **only** in quiet sedentary (Cluster 2): +8.6 pp, *d* = 1.74, *p* < 0.0001. |
-| Vocal participation     | HL deficit concentrated in active peer interaction, free play, and dispersed transition (all *p* < 0.05, *d* ≈ 0.7–0.9). Same direction but non-significant in the four teacher-anchored contexts. |
-| Peer affiliation        | HL homophily index < TH homophily in **all 7** contexts (significantly in 4). HL children spend more grouped time in mixed-diagnosis F-formations than TH children across all 7 contexts (significantly in 6). The most consistent of the three markers. |
+## Findings
 
-The pooled (across-context) HL/TH effect for peer co-presence is near-zero (*d* = +0.04). This is not because the signal is absent — it is because context-conditioning surfaces structure that unconditional comparison averages away.
+| Marker | Pattern across the six contexts |
+|---|---|
+| Peer co-presence | Differs in three of six contexts, with opposite signs: HL above TH in independent / parallel work (+7.8% of the minute, d = +1.59, q < 0.0001); HL below TH in peer-driven activity (−4.3%, q = 0.02) and seated guided work (−5.3%, q = 0.002). |
+| Vocal participation | HL children produce fewer utterances where peer talk is fast and adult scaffolding is reduced: peer-driven activity (q = 0.034) and adult-scaffolded peer activity (q = 0.048); dispersed transition in the same direction but marginal (q = 0.071). No significant gap in the three adult-dominated or quiet contexts. |
+| Peer affiliation | The most consistent asymmetry: TH grouped time is concentrated in TH-only groups, while HL children spend more grouped time in mixed groups than TH children in all six contexts (significantly in four). The homophily index is lower for HL children in all six (significantly in four). |
 
-## Software
+![Peer co-presence by context](figures/avg_time_group.png)
 
-- **Python** 3.10+
-- **Scientific stack:** *pandas*, *NumPy*, *SciPy*, *scikit-learn*, *statsmodels*
-- **Plots:** *matplotlib*, *seaborn*
+![Vocal participation by context](figures/avg_utt_count.png)
 
-## Reproducibility
+![Peer affiliation by context](figures/group_demographic.png)
 
-- The GMM is fit with a fixed random seed and 10 random restarts → bit-for-bit reproducible on the same input.
-- The Dominant Sets iteration is **not currently seeded** (flagged in thesis §7.3). The minute-level spatial-feature table is stable up to convergence but not bit-for-bit reproducible across independent runs.
-- All numerical results in Chapter 6 are reported from a single run.
-- Statistical analysis is restricted to (child, day) pairs marked present in the daily attendance record (21,650 of 22,405 child-minutes).
+Pooled over the whole day, the HL/TH difference in peer co-presence is close to zero (HL 38.8%, TH 39.9%), because context-specific effects of opposite sign cancel. The cohort composition (6 HL, 7 TH) alone gives TH children a homophily advantage of about 0.08 under random affiliation; in the four significant contexts the observed gap is 0.12 to 0.19.
 
-## Data
+## Limitations
 
-The dataset is **not redistributable**: child-worn audio (LENA) and indoor-tracking data of minors collected under a research-ethics protocol that does not permit public release. The repository contains the analysis pipeline, not the data.
+- A single classroom with 13 children; the six contexts and the HL/TH directions need multi-site replication.
+- The context labels are descriptive and not validated against coded ground truth.
+- Orientation is shoulder rather than gaze, so peer co-presence carries some unquantified measurement error.
+- Each child contributes about a tenth of the room average that defines its own context label, a weak circularity.
+- The markers are proxies for inclusion; they show exclusion risk, not whether bids for interaction are taken up.
 
+## Running the pipeline
+
+```bash
+pip install -r requirements.txt
+python src/run_pipeline.py
+```
+
+`run_pipeline.py` runs the stages in order (acoustic features, spatial features at 100 ms, one-minute aggregation, clustering, per-child aggregation, dashboard, statistics) and skips stages whose outputs already exist. The clustering stage writes the selected K to `selected_k.txt`, which the later stages read. Raw data are expected under `data/` and are not included.
+
+## Software and reproducibility
+
+- Python 3.10+ with pandas, NumPy, SciPy, scikit-learn and statsmodels; plots with matplotlib and seaborn. Versions are pinned in `requirements.txt`.
+- The GMM sweep uses seeds derived deterministically from a fixed base seed, so K selection and clustering reproduce exactly on the same input.
+- The Dominant Sets iteration starts from the uniform point of the simplex and runs to a fixed tolerance (1e-6) under a fixed iteration cap, so the spatial features are deterministic as well.
+- The statistical analysis is restricted to (child, day) pairs marked present in the attendance record.
 
 ## Acknowledgements
+
 Thesis supervised at **TU Delft** by **Hayley Hung** and **Stephanie Tan** (Socially Perceptive Computing Lab), with external supervision from **Daniel Messinger** and **Lynn Perry** (University of Miami).
 
-The reference pipeline this work builds on is the product of two prior contributions from the same group:
+The pipeline builds on two earlier contributions from the same group:
 
-- [TUDelft-SPC-Lab/group-detection](https://github.com/TUDelft-SPC-Lab/group-detection) — Dominant Sets F-formation extractor, by **Stephanie Tan**.
-- [TUDelft-SPC-Lab/ICDL2025](https://github.com/TUDelft-SPC-Lab/ICDL2025) — socio-spatial affinity parameterization, by **Yuan Tian**
+- [TUDelft-SPC-Lab/group-detection](https://github.com/TUDelft-SPC-Lab/group-detection): the Dominant Sets spatial group extractor, by **Stephanie Tan**.
+- [TUDelft-SPC-Lab/ICDL2025](https://github.com/TUDelft-SPC-Lab/ICDL2025): the socio-spatial affinity parameterisation, by **Yuan Tian**.
